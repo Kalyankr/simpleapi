@@ -1,32 +1,41 @@
-from tracemalloc import start
-import json
+from simpleapi.request import Request
+from simpleapi.response import Response
+from parse import parse
+from typing import Any
+import types
 
 
 class SimpleAPI:
 
-    def __init__(self):
+    def __init__(self, middlewares=[]) -> None:
         self.routes = dict()
+        self.middlewares = middlewares
+        self.middlewares_for_routes = dict()
 
-    def __call__(self, environ, start_response):
+    def __call__(self, environ, start_response) -> Any:
+        response = Response()
+        request = Request(environ)
 
-        for route, handler_dict in self.routes.items():
-            for method, handler in handler_dict.items():
-                if (
-                    environ["PATH_INFO"] == route
-                    and environ["REQUEST_METHOD"] == method
-                ):
-                    start_response("200 OK", [("Content-Type", "text/plain")])
-                    result = handler()
+        for path, handler_dict in self.routes.items():
+            print(path)
+            res = parse(path, request.path_info)
+            for request_method, handler in handler_dict.items():
+                if request.request_method == request_method and res:
+                    print(f"these are values {res.named}")
+                    handler(request, response, **res.named)
+                    return response.as_wsgi(start_response)
 
-                    return [result.encode("utf-8")]
+        return response.as_wsgi(start_response)
 
-    def get(self, route):
+    def get(self, path=None):
 
         def wrapper(handler):
-            path_info = route or f"/{handler.__name__}"
-            if path_info not in self.routes:
-                self.routes[path_info] = {}
-            self.routes[path_info]["GET"] = handler
+
+            path_name = path or f"/{handler.__name__}"
+            if path_name not in self.routes:
+                self.routes[path_name] = {}
+
+            self.routes[path_name]["GET"] = handler
 
             return handler
 
