@@ -12,7 +12,7 @@ class Response:
     def __init__(self, status_code=404, message="Route not found!") -> None:
         self.status_code = status_code
         self._body = message
-        self.headers = [("Content-Type", "text/plain")]
+        self.headers = {"Content-Type": "text/plain"}  # Use a dictionary for headers
 
     @property
     def body(self):
@@ -44,17 +44,15 @@ class Response:
 
     def set_header(self, key, value):
         """Set or update a response header."""
-        for i, (header_key, _) in enumerate(self.headers):
-            if header_key.lower() == key.lower():
-                self.headers[i] = (key, value)
-                return
-        self.headers.append((key, value))
+        self.headers[key] = value  # Directly update the dictionary
 
     def as_wsgi(self, start_response):
         """Prepare the response for WSGI format."""
         status_message = self.STATUS_MESSAGES.get(self.status_code, "Unknown Status")
         status_line = f"{self.status_code} {status_message}"
-        start_response(status_line, self.headers)
+        start_response(
+            status_line, list(self.headers.items())
+        )  # Convert dictionary to list for WSGI
 
         # Ensure body is always bytes for WSGI
         return [self._body.encode() if isinstance(self._body, str) else self._body]
