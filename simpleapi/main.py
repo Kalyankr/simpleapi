@@ -3,6 +3,7 @@ from simpleapi.response import Response
 from parse import parse
 from typing import Any, Callable, Dict, List
 import types
+import sys
 
 
 class SimpleAPI:
@@ -112,3 +113,27 @@ class SimpleAPI:
             return self.common_route(path, "DELETE", handler, middlewares)
 
         return wrapper
+
+    def run(self, host=None, port=None, debug=None):
+        """Run the app using Gunicorn."""
+        import os
+        import subprocess
+
+        host = host or os.getenv("SIMPLEAPI_HOST", "127.0.0.1")
+        port = port or os.getenv("SIMPLEAPI_PORT", "8000")
+        debug = (
+            debug
+            if debug is not None
+            else os.getenv("SIMPLEAPI_DEBUG", "False") == "True"
+        )
+
+        app_file = os.path.splitext(os.path.basename(sys.argv[0]))[0]
+        command = [
+            "gunicorn",
+            f"{app_file}:app",
+            "--bind",
+            f"{host}:{port}",
+        ]
+        if debug:
+            command.append("--reload")
+        subprocess.run(command)
