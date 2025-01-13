@@ -1,92 +1,114 @@
 from simpleapi.request import Request
 from simpleapi.response import Response
 from parse import parse
-from typing import Any
+from typing import Any, Callable, Dict, List
 import types
 
 
 class SimpleAPI:
     """SimpleAPI class to create a simple API"""
 
-    def __init__(self, middlewares=[]) -> None:
-        self.routes = dict()
-        self.middlewares = middlewares
-        self.middlewares_for_routes = dict()
+    def __init__(self, middlewares: List[Callable] = None) -> None:
+        self.routes: Dict[str, Dict[str, Callable]] = {}
+        self.middlewares = middlewares or []
+        self.middlewares_for_routes: Dict[str, Dict[str, List[Callable]]] = {}
 
     def __call__(self, environ, start_response) -> Any:
         response = Response()
         request = Request(environ)
 
-        for middleware in self.middlewares:
-            if isinstance(middleware, types.FunctionType):
-                middleware(request)
-            else:
-                raise TypeError("Middleware must be a function")
+        try:
+            # Apply global middlewares
+            for middleware in self.middlewares:
+                if isinstance(middleware, types.FunctionType):
+                    middleware(request)
+                else:
+                    raise TypeError("Global middleware must be a function")
 
-        for path, handler_dict in self.routes.items():
-            res = parse(path, request.path_info)
-            for request_method, handler in handler_dict.items():
-                if request.request_method == request_method and res:
+            # Match routes and handlers
+            for path, handler_dict in self.routes.items():
+                res = parse(path, request.path_info)
+                if res:
+                    for request_method, handler in handler_dict.items():
+                        if request.request_method == request_method:
+                            # Apply route-specific middlewares
+                            route_mw_list = self.middlewares_for_routes.get(
+                                path, {}
+                            ).get(request_method, [])
+                            for route_mw in route_mw_list:
+                                if isinstance(route_mw, types.FunctionType):
+                                    route_mw(request, response)
+                                else:
+                                    raise TypeError(
+                                        "Route middleware must be a function"
+                                    )
 
-                    route_mw_list = self.middlewares_for_routes[path][request_method]
-                    for route_mw in route_mw_list:
-                        if isinstance(route_mw, types.FunctionType):
-                            route_mw(request)
-                        else:
-                            raise TypeError("Middleware must be a function")
-
-                    handler(request, response, **res.named)
-                    return response.as_wsgi(start_response)
+                            # Call the route handler
+                            handler(request, response, **res.named)
+                            return response.as_wsgi(start_response)
+            # If no route matches
+            response.status_code = 404
+            response.body = b"Route not found"
+        except Exception as e:
+            # Handle exceptions and return error response
+            response.status_code = 500
+            response.body = str(e).encode("utf-8")
+            print(e)
 
         return response.as_wsgi(start_response)
 
-    def common_route(self, path, request_method, handler, middlewares):
+    def common_route(
+        self,
+        path: str,
+        request_method: str,
+        handler: Callable,
+        middlewares: List[Callable],
+    ) -> Callable:
         """Common function to add a route to the API"""
-
-        """Add routes to the Routes dictionary"""
         path_name = path or f"/{handler.__name__}"
 
-        if path_name not in self.routes:
-            self.routes[path_name] = {}
+        # Add the route to the routes dictionary
+        self.routes.setdefault(path_name, {})[request_method] = handler
 
-        self.routes[path_name][request_method] = handler
-
-        """Add middlewares to the middlewares_for_routes dictionary"""
-
-        if path_name not in self.middlewares_for_routes:
-            self.middlewares_for_routes[path_name] = {}
-        self.middlewares_for_routes[path_name][request_method] = middlewares
+        # Add middlewares for the route
+        self.middlewares_for_routes.setdefault(path_name, {})[
+            request_method
+        ] = middlewares
 
         return handler
 
-    def get(self, path=None, middlewares=[]):
+    def get(self, path: str = None, middlewares: List[Callable] = None):
         """Decorator to add a GET route to the API"""
+        middlewares = middlewares or []
 
-        def wrapper(handler):
+        def wrapper(handler: Callable):
             return self.common_route(path, "GET", handler, middlewares)
 
         return wrapper
 
-    def post(self, path=None):
+    def post(self, path: str = None, middlewares: List[Callable] = None):
         """Decorator to add a POST route to the API"""
+        middlewares = middlewares or []
 
-        def wrapper(handler):
-            return self.common_route(path, "POST", handler)
+        def wrapper(handler: Callable):
+            return self.common_route(path, "POST", handler, middlewares)
 
         return wrapper
 
-    def put(self, path=None):
+    def put(self, path: str = None, middlewares: List[Callable] = None):
         """Decorator to add a PUT route to the API"""
+        middlewares = middlewares or []
 
-        def wrapper(handler):
-            return self.common_route(path, "PUT", handler)
+        def wrapper(handler: Callable):
+            return self.common_route(path, "PUT", handler, middlewares)
 
         return wrapper
 
-    def delete(self, path=None):
+    def delete(self, path: str = None, middlewares: List[Callable] = None):
         """Decorator to add a DELETE route to the API"""
+        middlewares = middlewares or []
 
-        def wrapper(handler):
-            return self.common_route(path, "DELETE", handler)
+        def wrapper(handler: Callable):
+            return self.common_route(path, "DELETE", handler, middlewares)
 
         return wrapper
