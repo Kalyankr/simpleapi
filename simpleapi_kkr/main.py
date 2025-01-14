@@ -1,14 +1,18 @@
-import subprocess
-import sys
-import os
-import types
-import logging
+""" SimpleAPI class to create a simple API """
+
 import inspect
 import json
+import logging
+import os
+import subprocess
+import sys
+import types
 from typing import Any, Callable, Dict, List, Optional
+
 from parse import parse
-from simpleapi.request import Request
-from simpleapi.response import Response
+
+from simpleapi_kkr.request import Request
+from simpleapi_kkr.response import Response
 
 # Set up the logger
 logging.basicConfig(
